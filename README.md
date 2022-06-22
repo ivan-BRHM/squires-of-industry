@@ -1,2 +1,2 @@
-# squires-of-industry
+# squires of industry
 A small stress game using python arcade
