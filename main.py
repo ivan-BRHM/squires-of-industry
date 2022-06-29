@@ -15,9 +15,17 @@ SCREEN_BACKGROUND_COLOR = arcade.color.ORANGE
 # player constants
 PLAYER_SPRITE_SCALE = 0.5
 PLAYER_X_SPEED = 5.5
-PLAYER_START_X = SCREEN_WIDTH / 2
-PLAYER_START_Y = 150
-PLAYER_GRAPHICS = "images/red.png"
+
+PLAYER1_START_X = SCREEN_WIDTH / 2
+PLAYER1_START_Y = 150
+
+PLAYER2_START_X = SCREEN_WIDTH / 2
+PLAYER2_START_Y = 550
+
+PLAYER1_GRAPHICS = "images/red.png"
+PLAYER2_GRAPHICS = "images/blue.png"
+
+SHIFT_PLAYER_CONTROL_KEY = arcade.key.LSHIFT
 
 
 class Player(arcade.Sprite):
@@ -60,7 +68,10 @@ class MyGame(arcade.Window):
         # set the variables we will need:
 
         # player info
-        self.player_sprite = None
+        self.player_sprite1 = None
+        self.player_sprite2 = None
+        self.controlled_player_sprite = None
+        self.non_controlled_player_sprite = None
 
         # other sprites
 
@@ -78,13 +89,22 @@ class MyGame(arcade.Window):
         """
 
         # set up player object
-        self.player_sprite = Player(
-            filename=PLAYER_GRAPHICS,
+        self.player_sprite1 = Player(
+            filename=PLAYER1_GRAPHICS,
             scale=PLAYER_SPRITE_SCALE,
-            center_x=PLAYER_START_X,
-            center_y=PLAYER_START_Y
+            center_x=PLAYER1_START_X,
+            center_y=PLAYER1_START_Y
         )
 
+        self.player_sprite2 = Player(
+            filename=PLAYER2_GRAPHICS,
+            scale=PLAYER_SPRITE_SCALE,
+            center_x=PLAYER2_START_X,
+            center_y=PLAYER2_START_Y
+        )
+
+        self.controlled_player_sprite = self.player_sprite1
+        self.non_controlled_player_sprite = self.player_sprite2
 
     def on_draw(self):
         """
@@ -95,7 +115,8 @@ class MyGame(arcade.Window):
         arcade.start_render()
 
         # draw sprites
-        self.player_sprite.draw()
+        self.player_sprite1.draw()
+        self.player_sprite2.draw()
 
         # draw UI
 
@@ -106,17 +127,19 @@ class MyGame(arcade.Window):
         """
 
         # player movement
-        self.player_sprite.change_x = 0
+        self.player_sprite1.change_x = 0
+        self.player_sprite2.change_x = 0
 
         if self.a_pressed and not self.d_pressed:
-            self.player_sprite.change_x = -PLAYER_X_SPEED
+            self.controlled_player_sprite.change_x = -PLAYER_X_SPEED
         if self.d_pressed and not self.a_pressed:
-            self.player_sprite.change_x = PLAYER_X_SPEED
+            self.controlled_player_sprite.change_x = PLAYER_X_SPEED
 
         # update all sprites
 
         # player
-        self.player_sprite.update()
+        self.player_sprite1.update()
+        self.player_sprite2.update()
 
         # other sprites
 
@@ -133,7 +156,10 @@ class MyGame(arcade.Window):
             self.d_pressed = True
 
         # perform operations based on which key was pressed
-
+        if key == SHIFT_PLAYER_CONTROL_KEY:
+            b = self.controlled_player_sprite
+            self.controlled_player_sprite = self.non_controlled_player_sprite
+            self.non_controlled_player_sprite = b
 
     def on_key_release(self, key, modifiers):
         """
