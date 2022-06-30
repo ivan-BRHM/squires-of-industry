@@ -2,9 +2,7 @@
 this is the the game file for the project
 """
 
-
 import arcade
-
 
 # screen size/name
 SCREEN_WIDTH = 1000
@@ -13,7 +11,7 @@ SCREEN_NAME = "Squires of industry"
 SCREEN_BACKGROUND_COLOR = arcade.color.ORANGE
 
 # player constants
-PLAYER_SPRITE_SCALE = 0.5
+PLAYER_SPRITE_SCALE = 0.75
 PLAYER_X_SPEED = 5.5
 
 PLAYER1_START_X = SCREEN_WIDTH / 2
@@ -22,10 +20,18 @@ PLAYER1_START_Y = 150
 PLAYER2_START_X = SCREEN_WIDTH / 2
 PLAYER2_START_Y = 550
 
-PLAYER1_GRAPHICS = "images/red.png"
-PLAYER2_GRAPHICS = "images/blue.png"
+PLAYER1_GRAPHICS = "images/player/red.png"
+PLAYER2_GRAPHICS = "images/player/blue.png"
 
 SHIFT_PLAYER_CONTROL_KEY = arcade.key.LSHIFT
+
+# coalbox constants
+COALBOX_SCALE = 3
+COALBOX_GRAPHICS = "images/other_sprites/coal_box.png"
+COALBOX_SELECTED_GRAPHICS = "images/other_sprites/coal_box_selected.png"
+COALBOX_START_X = 250
+COALBOX_START_Y = 150
+COALBOX_SENSING_RANGE = COALBOX_SCALE * 36
 
 
 class Player(arcade.Sprite):
@@ -55,6 +61,21 @@ class Player(arcade.Sprite):
             self.bottom = SCREEN_HEIGHT
 
 
+class CoalBox(arcade.Sprite):
+    """a sprite to be interacted with to give the player coal to
+    put in the furnace"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.append_texture(arcade.load_texture(COALBOX_SELECTED_GRAPHICS))
+
+    def track_selected(self, selected: bool):
+        if selected:
+            self.set_texture(1)
+        else:
+            self.set_texture(0)
+
+
 class MyGame(arcade.Window):
     """
     main class for setup and running
@@ -74,6 +95,7 @@ class MyGame(arcade.Window):
         self.non_controlled_player_sprite = None
 
         # other sprites
+        self.coalbox_sprite = None
 
         # keyboard tracking
         self.a_pressed = False
@@ -82,13 +104,12 @@ class MyGame(arcade.Window):
         # set background color
         arcade.set_background_color(background_color)
 
-
     def setup(self):
         """
         initialize the variables we sat up
         """
 
-        # set up player object
+        # set up player objects
         self.player_sprite1 = Player(
             filename=PLAYER1_GRAPHICS,
             scale=PLAYER_SPRITE_SCALE,
@@ -106,6 +127,14 @@ class MyGame(arcade.Window):
         self.controlled_player_sprite = self.player_sprite1
         self.non_controlled_player_sprite = self.player_sprite2
 
+        # other sprites
+        self.coalbox_sprite = CoalBox(
+            filename=COALBOX_GRAPHICS,
+            scale=COALBOX_SCALE,
+            center_x=COALBOX_START_X,
+            center_y=COALBOX_START_Y
+        )
+
     def on_draw(self):
         """
         draw everything
@@ -117,9 +146,9 @@ class MyGame(arcade.Window):
         # draw sprites
         self.player_sprite1.draw()
         self.player_sprite2.draw()
+        self.coalbox_sprite.draw()
 
         # draw UI
-
 
     def on_update(self, delta_time):
         """
@@ -142,7 +171,8 @@ class MyGame(arcade.Window):
         self.player_sprite2.update()
 
         # other sprites
-
+        coalbox_player_dist = arcade.get_distance_between_sprites(self.coalbox_sprite, self.controlled_player_sprite)
+        self.coalbox_sprite.track_selected(coalbox_player_dist < COALBOX_SENSING_RANGE)
 
     def on_key_press(self, key, modifiers):
         """
