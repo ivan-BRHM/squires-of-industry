@@ -27,11 +27,26 @@ SHIFT_PLAYER_CONTROL_KEY = arcade.key.LSHIFT
 
 # coalbox constants
 COALBOX_SCALE = 3
-COALBOX_GRAPHICS = "images/other_sprites/coal_box.png"
-COALBOX_SELECTED_GRAPHICS = "images/other_sprites/coal_box_selected.png"
 COALBOX_START_X = 250
 COALBOX_START_Y = 150
+COALBOX_GRAPHICS = "images/other_sprites/coal_box.png"
+COALBOX_SELECTED_GRAPHICS = "images/other_sprites/coal_box_selected.png"
 COALBOX_SENSING_RANGE = COALBOX_SCALE * 36
+
+# furnace constants
+FURNACE_SCALE = 1
+FURNACE_START_X = 360
+FURNACE_START_Y = 165
+FURNACE_HEAT_LOSS = 500  # how many frames between the furnace losing heat.
+FURNACE_MAX_HEAT = 100
+FURNACE_MAX_FUEL = 50
+FURNACE_UPDATES_PER_FRAME = 10
+FURNACE_GRAPHICS = [
+    "images/other_sprites/furnace_graphics_0.png",
+    "images/other_sprites/furnace_graphics_1.png",
+    "images/other_sprites/furnace_graphics_2.png",
+    "images/other_sprites/furnace_graphics_3.png"
+]
 
 
 class Player(arcade.Sprite):
@@ -76,6 +91,44 @@ class CoalBox(arcade.Sprite):
             self.set_texture(0)
 
 
+class Furnace(arcade.Sprite):
+    """a sprite that can track its heat based on how much coal is in it,
+    and melt ore faster based on its heat"""
+
+    def __init__(self, **kwargs):
+        self.max_heat = FURNACE_MAX_HEAT
+        self.cur_heat = 100
+        self.max_fuel = FURNACE_MAX_FUEL
+        self.cur_fuel = 5
+
+        super().__init__(**kwargs)
+        for i in range(3):
+            self.append_texture(arcade.load_texture(FURNACE_GRAPHICS[1 + i]))
+
+        self.cur_texture_index = 0
+
+    def update(self):
+
+        if self.cur_heat > self.max_heat:
+            self.cur_heat = self.max_heat - 1
+
+        if self.cur_fuel > 0:
+            self.cur_heat += 1/60
+            self.cur_fuel -= 1/120
+
+        else:
+            self.cur_heat = max(0, self.cur_heat - ((101 - self.cur_heat) / FURNACE_HEAT_LOSS))
+
+    def update_animation(self, delta_time: float = 1/60):
+
+        self.cur_texture_index += 1
+        if self.cur_texture_index > 3 * FURNACE_UPDATES_PER_FRAME:
+            self.cur_texture_index = 0
+
+        frame = self.cur_texture_index // FURNACE_UPDATES_PER_FRAME
+        self.set_texture(frame)
+
+
 class MyGame(arcade.Window):
     """
     main class for setup and running
@@ -96,6 +149,7 @@ class MyGame(arcade.Window):
 
         # other sprites
         self.coalbox_sprite = None
+        self.furnace_sprite = None
 
         # keyboard tracking
         self.a_pressed = False
@@ -135,18 +189,27 @@ class MyGame(arcade.Window):
             center_y=COALBOX_START_Y
         )
 
+        self.furnace_sprite = Furnace(
+            filename=FURNACE_GRAPHICS[0],
+            scale=FURNACE_SCALE,
+            center_x=FURNACE_START_X,
+            center_y=FURNACE_START_Y
+        )
+
     def on_draw(self):
         """
         draw everything
         """
+        # note: drawing order dictates what overlaps what
 
         # prepare for drawing
         arcade.start_render()
 
         # draw sprites
-        self.player_sprite1.draw()
-        self.player_sprite2.draw()
         self.coalbox_sprite.draw()
+        self.furnace_sprite.draw()
+        self.player_sprite2.draw()
+        self.player_sprite1.draw()
 
         # draw UI
 
@@ -173,6 +236,9 @@ class MyGame(arcade.Window):
         # other sprites
         coalbox_player_dist = arcade.get_distance_between_sprites(self.coalbox_sprite, self.controlled_player_sprite)
         self.coalbox_sprite.track_selected(coalbox_player_dist < COALBOX_SENSING_RANGE)
+
+        self.furnace_sprite.update()
+        self.furnace_sprite.update_animation()
 
     def on_key_press(self, key, modifiers):
         """
