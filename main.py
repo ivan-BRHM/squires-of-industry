@@ -10,6 +10,10 @@ SCREEN_HEIGHT = 700
 SCREEN_NAME = "Squires of industry"
 SCREEN_BACKGROUND_COLOR = arcade.color.ORANGE
 
+# controls
+SHIFT_PLAYER_CONTROL_KEY = arcade.key.LSHIFT
+INTERACT_KEY = arcade.key.E
+
 # player constants
 PLAYER_SPRITE_SCALE = 0.75
 PLAYER_X_SPEED = 5.5
@@ -22,8 +26,6 @@ PLAYER2_START_Y = 550
 
 PLAYER1_GRAPHICS = "images/player/red.png"
 PLAYER2_GRAPHICS = "images/player/blue.png"
-
-SHIFT_PLAYER_CONTROL_KEY = arcade.key.LSHIFT
 
 # coalbox constants
 COALBOX_SCALE = 3
@@ -40,6 +42,7 @@ FURNACE_START_Y = 165
 FURNACE_HEAT_LOSS = 500  # how many frames between the furnace losing heat.
 FURNACE_MAX_HEAT = 100
 FURNACE_MAX_FUEL = 50
+FURNACE_FUEL_GAIN = 3  # fuel per sec
 FURNACE_UPDATES_PER_FRAME = 10
 FURNACE_GRAPHICS = [
     "images/other_sprites/furnace_graphics_0.png",
@@ -82,10 +85,11 @@ class CoalBox(arcade.Sprite):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.is_selected = False
         self.append_texture(arcade.load_texture(COALBOX_SELECTED_GRAPHICS))
 
-    def track_selected(self, selected: bool):
-        if selected:
+    def update(self):
+        if self.is_selected:
             self.set_texture(1)
         else:
             self.set_texture(0)
@@ -100,6 +104,7 @@ class Furnace(arcade.Sprite):
         self.cur_heat = 100
         self.max_fuel = FURNACE_MAX_FUEL
         self.cur_fuel = 5
+        self.is_coal_filling = False
 
         super().__init__(**kwargs)
         for i in range(3):
@@ -108,6 +113,12 @@ class Furnace(arcade.Sprite):
         self.cur_texture_index = 0
 
     def update(self):
+
+        if self.is_coal_filling:
+            self.cur_fuel += FURNACE_FUEL_GAIN/60
+
+        if self.cur_fuel > self.max_fuel:
+            self.cur_fuel = self.max_fuel
 
         if self.cur_heat > self.max_heat:
             self.cur_heat = self.max_heat - 1
@@ -235,7 +246,8 @@ class MyGame(arcade.Window):
 
         # other sprites
         coalbox_player_dist = arcade.get_distance_between_sprites(self.coalbox_sprite, self.controlled_player_sprite)
-        self.coalbox_sprite.track_selected(coalbox_player_dist < COALBOX_SENSING_RANGE)
+        self.coalbox_sprite.is_selected = coalbox_player_dist < COALBOX_SENSING_RANGE
+        self.coalbox_sprite.update()
 
         self.furnace_sprite.update()
         self.furnace_sprite.update_animation()
@@ -252,10 +264,19 @@ class MyGame(arcade.Window):
             self.d_pressed = True
 
         # perform operations based on which key was pressed
+        # shift control between player sprites
         if key == SHIFT_PLAYER_CONTROL_KEY:
             b = self.controlled_player_sprite
             self.controlled_player_sprite = self.non_controlled_player_sprite
             self.non_controlled_player_sprite = b
+
+        # interact with the coalbox to fill the furnace
+        if self.coalbox_sprite.is_selected:
+            if key == INTERACT_KEY:
+                self.furnace_sprite.is_coal_filling = True
+
+            elif key != SHIFT_PLAYER_CONTROL_KEY:  # otherwise we stop filling when we shift control
+                self.furnace_sprite.is_coal_filling = False
 
     def on_key_release(self, key, modifiers):
         """
