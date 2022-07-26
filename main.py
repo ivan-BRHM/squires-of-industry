@@ -15,7 +15,7 @@ SHIFT_PLAYER_CONTROL_KEY = arcade.key.LSHIFT
 INTERACT_KEY = arcade.key.E
 
 # player constants
-PLAYER_SPRITE_SCALE = 0.75
+PLAYER_SPRITE_SCALE = 1
 PLAYER_X_SPEED = 5.5
 
 PLAYER1_START_X = SCREEN_WIDTH / 2
@@ -24,8 +24,13 @@ PLAYER1_START_Y = 150
 PLAYER2_START_X = SCREEN_WIDTH / 2
 PLAYER2_START_Y = 550
 
-PLAYER1_GRAPHICS = "images/player/red.png"
-PLAYER2_GRAPHICS = "images/player/blue.png"
+RIGHT = 0  # for the purpose of witch direction the player is facing
+LEFT = 1
+PLAYER_IDLE_UPDATES_PER_FRAME = 18
+PLAYER_RUN_UPDATES_PER_FRAME = 6
+PLAYER_SHOVEL_UPDATES_PER_FRAME = 20
+PLAYER1_INITIAL_GRAPHICS = "images/player/player_red_idle_0.png"
+PLAYER2_INITIAL_GRAPHICS = "images/player/player_blue_idle_0.png"
 
 # coalbox constants
 COALBOX_SCALE = 3
@@ -52,13 +57,36 @@ FURNACE_GRAPHICS = [
 ]
 
 
+def load_texture_pair(filename):
+    return [
+        arcade.load_texture(filename),
+        arcade.load_texture(filename, flipped_horizontally=True)
+    ]
+
+
 class Player(arcade.Sprite):
     """
     a sprite controlled by the player
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, texture_color: str = 'red', **kwargs):
+        self.dir_facing = RIGHT
+        self.is_shoveling = False
+
         super().__init__(**kwargs)
+
+        # load textures
+        self.idle_anim = []
+        for i in range(4):
+            self.idle_anim.append(load_texture_pair(f"images/player/player_{texture_color}_idle_{i}.png"))
+
+        self.run_anim = []
+        for i in range(5):
+            self.run_anim.append(load_texture_pair(f"images/player/player_{texture_color}_run_{i}.png"))
+
+        self.shovel_anim = []
+        for i in range(6):
+            self.shovel_anim.append(load_texture_pair(f"images/player/player_{texture_color}_shovel_{i}.png"))
 
     def update(self):
         """
@@ -77,6 +105,42 @@ class Player(arcade.Sprite):
             self.top = 0
         if self.bottom > SCREEN_HEIGHT:
             self.bottom = SCREEN_HEIGHT
+
+    def update_animation(self, delta_time: float = 1 / 60):
+
+        # update direction
+        if self.change_x < 0 and self.dir_facing == RIGHT:
+            self.dir_facing = LEFT
+
+        if self.change_x > 0 and self.dir_facing == LEFT:
+            self.dir_facing = RIGHT
+
+        self.cur_texture_index += 1
+
+        # idle
+        if self.change_x == 0 and not self.is_shoveling:
+            if self.cur_texture_index > 3 * PLAYER_IDLE_UPDATES_PER_FRAME:
+                self.cur_texture_index = 0
+
+            frame = self.cur_texture_index // PLAYER_IDLE_UPDATES_PER_FRAME
+            self.texture = self.idle_anim[frame][self.dir_facing]
+
+        # run
+        if self.change_x != 0:
+            if self.cur_texture_index > 4 * PLAYER_RUN_UPDATES_PER_FRAME:
+                self.cur_texture_index = 0
+
+            frame = self.cur_texture_index // PLAYER_RUN_UPDATES_PER_FRAME
+            self.texture = self.run_anim[frame][self.dir_facing]
+
+        # shovel
+        if self.is_shoveling:
+            self.dir_facing = LEFT
+            if self.cur_texture_index > 5 * PLAYER_SHOVEL_UPDATES_PER_FRAME:
+                self.cur_texture_index = 0
+
+            frame = self.cur_texture_index // PLAYER_SHOVEL_UPDATES_PER_FRAME
+            self.texture = self.shovel_anim[frame][self.dir_facing]
 
 
 class CoalBox(arcade.Sprite):
@@ -176,14 +240,16 @@ class MyGame(arcade.Window):
 
         # set up player objects
         self.player_sprite1 = Player(
-            filename=PLAYER1_GRAPHICS,
+            texture_color='red',
+            filename=PLAYER1_INITIAL_GRAPHICS,
             scale=PLAYER_SPRITE_SCALE,
             center_x=PLAYER1_START_X,
             center_y=PLAYER1_START_Y
         )
 
         self.player_sprite2 = Player(
-            filename=PLAYER2_GRAPHICS,
+            texture_color='blue',
+            filename=PLAYER2_INITIAL_GRAPHICS,
             scale=PLAYER_SPRITE_SCALE,
             center_x=PLAYER2_START_X,
             center_y=PLAYER2_START_Y
@@ -244,6 +310,9 @@ class MyGame(arcade.Window):
         self.player_sprite1.update()
         self.player_sprite2.update()
 
+        self.player_sprite1.update_animation()
+        self.player_sprite2.update_animation()
+
         # other sprites
         coalbox_player_dist = arcade.get_distance_between_sprites(self.coalbox_sprite, self.controlled_player_sprite)
         self.coalbox_sprite.is_selected = coalbox_player_dist < COALBOX_SENSING_RANGE
@@ -274,9 +343,11 @@ class MyGame(arcade.Window):
         if self.coalbox_sprite.is_selected:
             if key == INTERACT_KEY:
                 self.furnace_sprite.is_coal_filling = True
+                self.controlled_player_sprite.is_shoveling = True
 
             elif key != SHIFT_PLAYER_CONTROL_KEY:  # otherwise we stop filling when we shift control
                 self.furnace_sprite.is_coal_filling = False
+                self.controlled_player_sprite.is_shoveling = False
 
     def on_key_release(self, key, modifiers):
         """
