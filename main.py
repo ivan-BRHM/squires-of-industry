@@ -56,6 +56,18 @@ FURNACE_GRAPHICS = [
     "images/other_sprites/furnace_graphics_3.png"
 ]
 
+# goldmine constants
+GOLDMINE_SCALE = 0.9
+GOLDMINE_START_X = 890
+GOLDMINE_START_Y = 600
+GOLDMINE_SENSING_RANGE = 130
+GOLDMINE_GRAPHICS = "images/other_sprites/gold_mine.png"
+GOLDMINE_SELECTED_GRAPHICS = "images/other_sprites/gold_mine_selected.png"
+
+# gold ore constants
+GOLD_ORE_SCALE = 3
+GOLD_ORE_GRAPHICS = "images/other_sprites/gold_ore.png"
+
 
 def load_texture_pair(filename):
     return [
@@ -72,6 +84,7 @@ class Player(arcade.Sprite):
     def __init__(self, texture_color: str = 'red', **kwargs):
         self.dir_facing = RIGHT
         self.is_shoveling = False
+        self.carrying = []
 
         super().__init__(**kwargs)
 
@@ -143,22 +156,6 @@ class Player(arcade.Sprite):
             self.texture = self.shovel_anim[frame][self.dir_facing]
 
 
-class CoalBox(arcade.Sprite):
-    """a sprite to be interacted with to give the player coal to
-    put in the furnace"""
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.is_selected = False
-        self.append_texture(arcade.load_texture(COALBOX_SELECTED_GRAPHICS))
-
-    def update(self):
-        if self.is_selected:
-            self.set_texture(1)
-        else:
-            self.set_texture(0)
-
-
 class Furnace(arcade.Sprite):
     """a sprite that can track its heat based on how much coal is in it,
     and melt ore faster based on its heat"""
@@ -204,6 +201,50 @@ class Furnace(arcade.Sprite):
         self.set_texture(frame)
 
 
+class GoldMine(arcade.Sprite):
+    """a sprite to be interacted with to give the player gold ore
+     - that can be put in the furnace"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.is_selected = False
+        self.append_texture(arcade.load_texture(GOLDMINE_SELECTED_GRAPHICS))
+
+    def update(self):
+        if self.is_selected:
+            self.set_texture(1)
+        else:
+            self.set_texture(0)
+
+
+class GoldOre(arcade.Sprite):
+    """only graphics"""
+
+    def __init__(self, parent_player: Player, **kwargs):
+        super().__init__(**kwargs)
+        self.parent_player = parent_player
+
+    def update(self):
+        if self in self.parent_player.carrying:
+            self.center_x = self.parent_player.center_x
+            self.center_y = self.parent_player.center_y - 15
+
+
+class CoalBox(arcade.Sprite):
+    """a sprite to be interacted with to let the player fill the furnace"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.is_selected = False
+        self.append_texture(arcade.load_texture(COALBOX_SELECTED_GRAPHICS))
+
+    def update(self):
+        if self.is_selected:
+            self.set_texture(1)
+        else:
+            self.set_texture(0)
+
+
 class MyGame(arcade.Window):
     """
     main class for setup and running
@@ -225,6 +266,8 @@ class MyGame(arcade.Window):
         # other sprites
         self.coalbox_sprite = None
         self.furnace_sprite = None
+        self.goldmine_sprite = None
+        self.gold_ore_list = arcade.SpriteList()
 
         # keyboard tracking
         self.a_pressed = False
@@ -273,6 +316,13 @@ class MyGame(arcade.Window):
             center_y=FURNACE_START_Y
         )
 
+        self.goldmine_sprite = GoldMine(
+            filename=GOLDMINE_GRAPHICS,
+            scale=GOLDMINE_SCALE,
+            center_x=GOLDMINE_START_X,
+            center_y=GOLDMINE_START_Y
+        )
+
     def on_draw(self):
         """
         draw everything
@@ -283,10 +333,12 @@ class MyGame(arcade.Window):
         arcade.start_render()
 
         # draw sprites
+        self.goldmine_sprite.draw()
         self.coalbox_sprite.draw()
         self.furnace_sprite.draw()
         self.player_sprite2.draw()
         self.player_sprite1.draw()
+        self.gold_ore_list.draw()
 
         # draw UI
 
@@ -294,6 +346,7 @@ class MyGame(arcade.Window):
         """
         keyboard interpretation and other game mechanics
         """
+        print(len(self.gold_ore_list))
 
         # player movement
         self.player_sprite1.change_x = 0
@@ -314,10 +367,21 @@ class MyGame(arcade.Window):
         self.player_sprite2.update_animation()
 
         # other sprites
+        # coalbox
         coalbox_player_dist = arcade.get_distance_between_sprites(self.coalbox_sprite, self.controlled_player_sprite)
         self.coalbox_sprite.is_selected = coalbox_player_dist < COALBOX_SENSING_RANGE
         self.coalbox_sprite.update()
 
+        # goldmine
+        goldmine_player_dist = arcade.get_distance_between_sprites(self.goldmine_sprite, self.controlled_player_sprite)
+        self.goldmine_sprite.is_selected = goldmine_player_dist < GOLDMINE_SENSING_RANGE
+        self.goldmine_sprite.update()
+
+        # gold ore
+        for obj in self.gold_ore_list:
+            obj.update()
+
+        # furnace
         self.furnace_sprite.update()
         self.furnace_sprite.update_animation()
 
@@ -348,6 +412,20 @@ class MyGame(arcade.Window):
             elif key != SHIFT_PLAYER_CONTROL_KEY:  # otherwise we stop filling when we shift control
                 self.furnace_sprite.is_coal_filling = False
                 self.controlled_player_sprite.is_shoveling = False
+
+        # interact with goldmine to get gold
+        if key == INTERACT_KEY and self.goldmine_sprite.is_selected:
+            if not self.controlled_player_sprite.carrying:
+                new_gold_ore_obj = GoldOre(
+                    parent_player=self.controlled_player_sprite,
+                    filename=GOLD_ORE_GRAPHICS,
+                    scale=GOLD_ORE_SCALE,
+                    center_x=self.controlled_player_sprite.center_x,
+                    center_y=self.controlled_player_sprite.center_y,
+                )
+
+                self.controlled_player_sprite.carrying.append(new_gold_ore_obj)
+                self.gold_ore_list.append(new_gold_ore_obj)
 
     def on_key_release(self, key, modifiers):
         """
