@@ -4,7 +4,7 @@ this is the the game file for the project
 
 import arcade
 
-# screen size/name
+# screen constants
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 700
 SCREEN_NAME = "Squires of industry"
@@ -68,6 +68,15 @@ GOLDMINE_SELECTED_GRAPHICS = "images/other_sprites/gold_mine_selected.png"
 GOLD_ORE_SCALE = 3
 GOLD_ORE_GRAPHICS = "images/other_sprites/gold_ore.png"
 
+# transport constants
+TRANSPORT_SCALE = 1.5
+TRANSPORT_START_X = 64
+TRANSPORT_START_Y = 350
+TRANSPORT_SENSING_RANGE = 512
+TRANSPORT_SPEED = 1  # px per update
+TRANSPORT_UPDATES_PER_FRAME = 12
+TRANSPORT_GRAPHICS = "images/other_sprites/transport_{frame}.png"
+
 
 def load_texture_pair(filename):
     return [
@@ -118,6 +127,11 @@ class Player(arcade.Sprite):
             self.top = 0
         if self.bottom > SCREEN_HEIGHT:
             self.bottom = SCREEN_HEIGHT
+
+        # update carrying
+        if self.carrying:
+            self.carrying[0].center_x = self.center_x
+            self.carrying[0].center_y = self.center_y
 
     def update_animation(self, delta_time: float = 1 / 60):
 
@@ -201,6 +215,35 @@ class Furnace(arcade.Sprite):
         self.set_texture(frame)
 
 
+class Transport(arcade.Sprite):
+    """a sprite to let the players transport objects from floor to floor"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.transporting = []
+        self.cur_frame = 0
+        self.append_texture(arcade.load_texture(TRANSPORT_GRAPHICS.format(frame=1)))
+
+    def update(self):
+        print(self.transporting)
+        # update transporting
+        if self.transporting:
+            for sprite in self.transporting:
+                sprite.center_x = self.center_x + 32
+                sprite.center_y -= TRANSPORT_SPEED
+                if sprite.center_y < self.center_y - 256:
+                    self.transporting.remove(sprite)
+
+    def update_animation(self, delta_time: float = 1 / 60):
+
+        self.cur_texture_index += 1
+        if self.cur_texture_index > TRANSPORT_UPDATES_PER_FRAME:
+            self.cur_texture_index = 0
+            self.cur_frame = 1 if self.cur_frame == 0 else 0
+
+        self.set_texture(self.cur_frame)
+
+
 class GoldMine(arcade.Sprite):
     """a sprite to be interacted with to give the player gold ore
      - that can be put in the furnace"""
@@ -218,16 +261,11 @@ class GoldMine(arcade.Sprite):
 
 
 class GoldOre(arcade.Sprite):
-    """only graphics"""
+    """an object to be transported around mostly graphics"""
 
     def __init__(self, parent_player: Player, **kwargs):
         super().__init__(**kwargs)
         self.parent_player = parent_player
-
-    def update(self):
-        if self in self.parent_player.carrying:
-            self.center_x = self.parent_player.center_x
-            self.center_y = self.parent_player.center_y - 15
 
 
 class CoalBox(arcade.Sprite):
@@ -268,6 +306,7 @@ class MyGame(arcade.Window):
         self.furnace_sprite = None
         self.goldmine_sprite = None
         self.gold_ore_list = arcade.SpriteList()
+        self.transport_sprite = None
 
         # keyboard tracking
         self.a_pressed = False
@@ -323,6 +362,14 @@ class MyGame(arcade.Window):
             center_y=GOLDMINE_START_Y
         )
 
+        self.transport_sprite = Transport(
+            filename=TRANSPORT_GRAPHICS.format(frame=0),
+            scale=TRANSPORT_SCALE,
+            center_x=TRANSPORT_START_X,
+            center_y=TRANSPORT_START_Y,
+
+        )
+
     def on_draw(self):
         """
         draw everything
@@ -336,6 +383,7 @@ class MyGame(arcade.Window):
         self.goldmine_sprite.draw()
         self.coalbox_sprite.draw()
         self.furnace_sprite.draw()
+        self.transport_sprite.draw()
         self.player_sprite2.draw()
         self.player_sprite1.draw()
         self.gold_ore_list.draw()
@@ -344,9 +392,8 @@ class MyGame(arcade.Window):
 
     def on_update(self, delta_time):
         """
-        keyboard interpretation and other game mechanics
+        player movement and other game mechanics
         """
-        print(len(self.gold_ore_list))
 
         # player movement
         self.player_sprite1.change_x = 0
@@ -377,13 +424,13 @@ class MyGame(arcade.Window):
         self.goldmine_sprite.is_selected = goldmine_player_dist < GOLDMINE_SENSING_RANGE
         self.goldmine_sprite.update()
 
-        # gold ore
-        for obj in self.gold_ore_list:
-            obj.update()
-
         # furnace
         self.furnace_sprite.update()
         self.furnace_sprite.update_animation()
+
+        # transport
+        self.transport_sprite.update()
+        self.transport_sprite.update_animation()
 
     def on_key_press(self, key, modifiers):
         """
@@ -397,6 +444,7 @@ class MyGame(arcade.Window):
             self.d_pressed = True
 
         # perform operations based on which key was pressed
+        # INTERACTIONS #
         # shift control between player sprites
         if key == SHIFT_PLAYER_CONTROL_KEY:
             b = self.controlled_player_sprite
@@ -426,6 +474,12 @@ class MyGame(arcade.Window):
 
                 self.controlled_player_sprite.carrying.append(new_gold_ore_obj)
                 self.gold_ore_list.append(new_gold_ore_obj)
+
+        # interact with transport to transport gold
+        transport_player_dist = arcade.get_distance_between_sprites(self.transport_sprite, self.controlled_player_sprite)
+        if key == INTERACT_KEY and transport_player_dist < TRANSPORT_SENSING_RANGE and self.controlled_player_sprite.carrying:
+            self.transport_sprite.transporting.append(self.controlled_player_sprite.carrying[0])
+            self.controlled_player_sprite.carrying = []
 
     def on_key_release(self, key, modifiers):
         """
