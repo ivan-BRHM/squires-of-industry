@@ -221,6 +221,7 @@ class Transport(arcade.Sprite):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.transporting = []
+        self.is_selected = False
         self.cur_frame = 0
         self.append_texture(arcade.load_texture(TRANSPORT_GRAPHICS.format(frame=1)))
 
@@ -263,9 +264,8 @@ class GoldMine(arcade.Sprite):
 class GoldOre(arcade.Sprite):
     """an object to be transported around mostly graphics"""
 
-    def __init__(self, parent_player: Player, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.parent_player = parent_player
 
 
 class CoalBox(arcade.Sprite):
@@ -429,7 +429,11 @@ class MyGame(arcade.Window):
         self.furnace_sprite.update_animation()
 
         # transport
-        self.transport_sprite.update()
+        transport_player_dist = arcade.get_distance_between_sprites(self.transport_sprite, self.controlled_player_sprite)
+        if transport_player_dist < TRANSPORT_SENSING_RANGE and self.controlled_player_sprite.carrying:
+            self.transport_sprite.is_selected = True
+        else:
+            self.transport_sprite.is_selected = False
         self.transport_sprite.update_animation()
 
     def on_key_press(self, key, modifiers):
@@ -465,7 +469,6 @@ class MyGame(arcade.Window):
         if key == INTERACT_KEY and self.goldmine_sprite.is_selected:
             if not self.controlled_player_sprite.carrying:
                 new_gold_ore_obj = GoldOre(
-                    parent_player=self.controlled_player_sprite,
                     filename=GOLD_ORE_GRAPHICS,
                     scale=GOLD_ORE_SCALE,
                     center_x=self.controlled_player_sprite.center_x,
@@ -476,8 +479,7 @@ class MyGame(arcade.Window):
                 self.gold_ore_list.append(new_gold_ore_obj)
 
         # interact with transport to transport gold
-        transport_player_dist = arcade.get_distance_between_sprites(self.transport_sprite, self.controlled_player_sprite)
-        if key == INTERACT_KEY and transport_player_dist < TRANSPORT_SENSING_RANGE and self.controlled_player_sprite.carrying:
+        if key == INTERACT_KEY and self.transport_sprite.is_selected:
             self.transport_sprite.transporting.append(self.controlled_player_sprite.carrying[0])
             self.controlled_player_sprite.carrying = []
 
