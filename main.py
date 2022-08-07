@@ -24,6 +24,8 @@ PLAYER1_START_Y = 150
 PLAYER2_START_X = SCREEN_WIDTH / 2
 PLAYER2_START_Y = 550
 
+PLAYER_PICK_UP_RANGE = 64
+
 RIGHT = 0  # for the purpose of witch direction the player is facing
 LEFT = 1
 PLAYER_IDLE_UPDATES_PER_FRAME = 18
@@ -64,10 +66,6 @@ GOLDMINE_SENSING_RANGE = 130
 GOLDMINE_GRAPHICS = "images/other_sprites/gold_mine.png"
 GOLDMINE_SELECTED_GRAPHICS = "images/other_sprites/gold_mine_selected.png"
 
-# gold ore constants
-GOLD_ORE_SCALE = 3
-GOLD_ORE_GRAPHICS = "images/other_sprites/gold_ore.png"
-
 # transport constants
 TRANSPORT_SCALE = 1.5
 TRANSPORT_START_X = 64
@@ -76,6 +74,15 @@ TRANSPORT_SENSING_RANGE = 512
 TRANSPORT_SPEED = 1  # px per update
 TRANSPORT_UPDATES_PER_FRAME = 12
 TRANSPORT_GRAPHICS = "images/other_sprites/transport_{frame}.png"
+
+# gold ore constants
+GOLD_ORE_SCALE = 3
+GOLD_ORE_GRAPHICS = "images/other_sprites/gold_ore.png"
+
+# UI
+# pick up sign constants
+PICK_UP_SIGN_SCALE = 1
+PICK_UP_SIGN_GRAPHICS = "images/UI/pick_up_sign.png"
 
 
 def load_texture_pair(filename):
@@ -93,6 +100,8 @@ class Player(arcade.Sprite):
     def __init__(self, texture_color: str = 'red', **kwargs):
         self.dir_facing = RIGHT
         self.is_shoveling = False
+        self.next_pickup = None
+        self.can_pick_up = False
         self.carrying = []
 
         super().__init__(**kwargs)
@@ -132,6 +141,14 @@ class Player(arcade.Sprite):
         if self.carrying:
             self.carrying[0].center_x = self.center_x
             self.carrying[0].center_y = self.center_y
+
+        # update can_pick_up
+        if self.next_pickup:
+            dist_to_pickup = arcade.get_distance_between_sprites(self, self.next_pickup)
+            if not self.carrying and dist_to_pickup < PLAYER_PICK_UP_RANGE:
+                self.can_pick_up = True
+            else:
+                self.can_pick_up = False
 
     def update_animation(self, delta_time: float = 1 / 60):
 
@@ -226,7 +243,6 @@ class Transport(arcade.Sprite):
         self.append_texture(arcade.load_texture(TRANSPORT_GRAPHICS.format(frame=1)))
 
     def update(self):
-        print(self.transporting)
         # update transporting
         if self.transporting:
             for sprite in self.transporting:
@@ -261,13 +277,6 @@ class GoldMine(arcade.Sprite):
             self.set_texture(0)
 
 
-class GoldOre(arcade.Sprite):
-    """an object to be transported around mostly graphics"""
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-
 class CoalBox(arcade.Sprite):
     """a sprite to be interacted with to let the player fill the furnace"""
 
@@ -281,6 +290,20 @@ class CoalBox(arcade.Sprite):
             self.set_texture(1)
         else:
             self.set_texture(0)
+
+
+class GoldOre(arcade.Sprite):
+    """an object to be transported around mostly graphics"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+
+class PickUpSign(arcade.Sprite):
+    """only graphics"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
 
 class MyGame(arcade.Window):
@@ -307,6 +330,9 @@ class MyGame(arcade.Window):
         self.goldmine_sprite = None
         self.gold_ore_list = arcade.SpriteList()
         self.transport_sprite = None
+
+        # UI sprites
+        self.pick_up_sign_sprite = None
 
         # keyboard tracking
         self.a_pressed = False
@@ -370,6 +396,14 @@ class MyGame(arcade.Window):
 
         )
 
+        # UI sprites setup
+        self.pick_up_sign_sprite = PickUpSign(
+            filename=PICK_UP_SIGN_GRAPHICS,
+            scale=PICK_UP_SIGN_SCALE,
+            center_x=1500,  # off screen
+            center_y=1500,  # off screen
+        )
+
     def on_draw(self):
         """
         draw everything
@@ -389,11 +423,13 @@ class MyGame(arcade.Window):
         self.gold_ore_list.draw()
 
         # draw UI
+        self.pick_up_sign_sprite.draw()
 
     def on_update(self, delta_time):
         """
         player movement and other game mechanics
         """
+        print(self.pick_up_sign_sprite.center_x)
 
         # player movement
         self.player_sprite1.change_x = 0
@@ -412,6 +448,15 @@ class MyGame(arcade.Window):
 
         self.player_sprite1.update_animation()
         self.player_sprite2.update_animation()
+
+        # check for closest gold ore (for pickup purposes)
+        closest_gold_ore = None
+        closest_gold_ore_dist = 99999
+        for ore in self.gold_ore_list:
+            if arcade.get_distance_between_sprites(ore, self.controlled_player_sprite) < closest_gold_ore_dist:
+                closest_gold_ore = ore
+
+        self.controlled_player_sprite.next_pickup = closest_gold_ore
 
         # other sprites
         # coalbox
@@ -434,7 +479,17 @@ class MyGame(arcade.Window):
             self.transport_sprite.is_selected = True
         else:
             self.transport_sprite.is_selected = False
+
+        self.transport_sprite.update()
         self.transport_sprite.update_animation()
+
+        # UI
+        # pick up sign
+        if self.controlled_player_sprite.can_pick_up:
+            self.pick_up_sign_sprite.center_x = self.controlled_player_sprite.center_x
+            self.pick_up_sign_sprite.center_y = self.controlled_player_sprite.center_y + 64 * PLAYER_SPRITE_SCALE
+        else:
+            self.pick_up_sign_sprite.center_x, self.pick_up_sign_sprite.center_y = 1500, 1500  # off screen
 
     def on_key_press(self, key, modifiers):
         """
@@ -477,6 +532,10 @@ class MyGame(arcade.Window):
 
                 self.controlled_player_sprite.carrying.append(new_gold_ore_obj)
                 self.gold_ore_list.append(new_gold_ore_obj)
+
+        # pick up gold ore
+        if key == INTERACT_KEY and self.controlled_player_sprite.can_pick_up:
+            self.controlled_player_sprite.carrying.append(self.controlled_player_sprite.next_pickup)
 
         # interact with transport to transport gold
         if key == INTERACT_KEY and self.transport_sprite.is_selected:
