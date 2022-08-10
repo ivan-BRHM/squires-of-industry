@@ -1,5 +1,5 @@
 """
-this is the the game file for the project
+this is the game file for the project
 """
 
 import arcade
@@ -70,7 +70,7 @@ GOLDMINE_SELECTED_GRAPHICS = "images/other_sprites/gold_mine_selected.png"
 TRANSPORT_SCALE = 1.5
 TRANSPORT_START_X = 64
 TRANSPORT_START_Y = 350
-TRANSPORT_SENSING_RANGE = 512
+TRANSPORT_SENSING_RANGE = 224
 TRANSPORT_SPEED = 1  # px per update
 TRANSPORT_UPDATES_PER_FRAME = 12
 TRANSPORT_GRAPHICS = "images/other_sprites/transport_{frame}.png"
@@ -237,7 +237,7 @@ class Transport(arcade.Sprite):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.transporting = []
+        self.transporting = set()
         self.is_selected = False
         self.cur_frame = 0
         self.append_texture(arcade.load_texture(TRANSPORT_GRAPHICS.format(frame=1)))
@@ -245,11 +245,15 @@ class Transport(arcade.Sprite):
     def update(self):
         # update transporting
         if self.transporting:
+            to_remove = []
             for sprite in self.transporting:
                 sprite.center_x = self.center_x + 32
                 sprite.center_y -= TRANSPORT_SPEED
                 if sprite.center_y < self.center_y - 256:
-                    self.transporting.remove(sprite)
+                    to_remove.append(sprite)
+
+            for obj in to_remove:
+                self.transporting.remove(obj)
 
     def update_animation(self, delta_time: float = 1 / 60):
 
@@ -429,7 +433,6 @@ class MyGame(arcade.Window):
         """
         player movement and other game mechanics
         """
-        print(self.pick_up_sign_sprite.center_x)
 
         # player movement
         self.player_sprite1.change_x = 0
@@ -536,10 +539,13 @@ class MyGame(arcade.Window):
         # pick up gold ore
         if key == INTERACT_KEY and self.controlled_player_sprite.can_pick_up:
             self.controlled_player_sprite.carrying.append(self.controlled_player_sprite.next_pickup)
+            
+            if self.controlled_player_sprite.next_pickup in self.transport_sprite.transporting:
+                self.transport_sprite.transporting.remove(self.controlled_player_sprite.next_pickup)
 
         # interact with transport to transport gold
         if key == INTERACT_KEY and self.transport_sprite.is_selected:
-            self.transport_sprite.transporting.append(self.controlled_player_sprite.carrying[0])
+            self.transport_sprite.transporting.add(self.controlled_player_sprite.carrying[0])
             self.controlled_player_sprite.carrying = []
 
     def on_key_release(self, key, modifiers):
