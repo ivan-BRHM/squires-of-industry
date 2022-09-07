@@ -50,6 +50,7 @@ FURNACE_HEAT_LOSS = 500  # how many frames between the furnace losing heat.
 FURNACE_MAX_HEAT = 100
 FURNACE_MAX_FUEL = 50
 FURNACE_FUEL_GAIN = 3  # fuel per sec
+FURNACE_SENSING_RANGE = 98
 FURNACE_UPDATES_PER_FRAME = 10
 FURNACE_GRAPHICS = [
     "images/other_sprites/furnace_graphics_0.png",
@@ -57,6 +58,8 @@ FURNACE_GRAPHICS = [
     "images/other_sprites/furnace_graphics_2.png",
     "images/other_sprites/furnace_graphics_3.png"
 ]
+FURNACE_SELECTION_GRAPHICS = "images/UI/furnace_selection.png"
+
 
 # goldmine constants
 GOLDMINE_SCALE = 0.9
@@ -196,9 +199,19 @@ class Furnace(arcade.Sprite):
         self.cur_heat = 100
         self.max_fuel = FURNACE_MAX_FUEL
         self.cur_fuel = 5
+        self.is_selected = False
         self.is_coal_filling = False
+        self.processing = []
 
         super().__init__(**kwargs)
+
+        self.selection = FurnaceSelection(
+            filename=FURNACE_SELECTION_GRAPHICS,
+            scale=FURNACE_SCALE,
+            center_x=FURNACE_START_X,
+            center_y=FURNACE_START_Y
+        )
+
         for i in range(3):
             self.append_texture(arcade.load_texture(FURNACE_GRAPHICS[1 + i]))
 
@@ -221,6 +234,13 @@ class Furnace(arcade.Sprite):
 
         else:
             self.cur_heat = max(0, self.cur_heat - ((101 - self.cur_heat) / FURNACE_HEAT_LOSS))
+
+        # selection
+        self.selection.alpha = 255 if self.is_selected else 0
+
+        # update processing
+        for obj in self.processing:
+            obj.center_x = 2000  # off-screen
 
     def update_animation(self, delta_time: float = 1/60):
 
@@ -298,6 +318,13 @@ class CoalBox(arcade.Sprite):
 
 class GoldOre(arcade.Sprite):
     """an object to be transported around mostly graphics"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+
+class FurnaceSelection(arcade.Sprite):
+    """just graphics"""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -419,14 +446,21 @@ class MyGame(arcade.Window):
 
         # draw sprites
         self.goldmine_sprite.draw()
+
         self.coalbox_sprite.draw()
+
         self.furnace_sprite.draw()
+
         self.transport_sprite.draw()
+
+        self.furnace_sprite.selection.draw()
+
         self.player_sprite2.draw()
+
         self.player_sprite1.draw()
+
         self.gold_ore_list.draw()
 
-        # draw UI
         self.pick_up_sign_sprite.draw()
 
     def on_update(self, delta_time):
@@ -473,6 +507,12 @@ class MyGame(arcade.Window):
         self.goldmine_sprite.update()
 
         # furnace
+        furnace_player_dist = arcade.get_distance_between_sprites(self.furnace_sprite, self.controlled_player_sprite)
+        if furnace_player_dist < FURNACE_SENSING_RANGE and self.controlled_player_sprite.carrying:
+            self.furnace_sprite.is_selected = True
+        else:
+            self.furnace_sprite.is_selected = False
+
         self.furnace_sprite.update()
         self.furnace_sprite.update_animation()
 
@@ -523,6 +563,11 @@ class MyGame(arcade.Window):
                 self.furnace_sprite.is_coal_filling = False
                 self.controlled_player_sprite.is_shoveling = False
 
+        # interact with furnace to put ore in the oven
+        if key == INTERACT_KEY and self.furnace_sprite.is_selected:
+            self.furnace_sprite.processing.append(self.controlled_player_sprite.carrying[0])
+            self.controlled_player_sprite.carrying = []
+
         # interact with goldmine to get gold
         if key == INTERACT_KEY and self.goldmine_sprite.is_selected:
             if not self.controlled_player_sprite.carrying:
@@ -539,7 +584,7 @@ class MyGame(arcade.Window):
         # pick up gold ore
         if key == INTERACT_KEY and self.controlled_player_sprite.can_pick_up:
             self.controlled_player_sprite.carrying.append(self.controlled_player_sprite.next_pickup)
-            
+
             if self.controlled_player_sprite.next_pickup in self.transport_sprite.transporting:
                 self.transport_sprite.transporting.remove(self.controlled_player_sprite.next_pickup)
 
